@@ -25,23 +25,18 @@ def binarizer(value):
 polygon_api_key = "KkfCQ7fsZnx0yK4bhX9fD81QplTh0Pf3"
 calendar = get_calendar("NYSE")
 
-# trading_dates = calendar.schedule(start_date = "2019-01-01", end_date = vix_data["date"].iloc[-1]).index.strftime("%Y-%m-%d").values
 trading_dates = calendar.schedule(start_date = "2023-05-01", end_date = (datetime.today() + timedelta(days=3)).strftime("%Y-%m-%d")).index.strftime("%Y-%m-%d").values
+full_trading_dates = calendar.schedule(start_date = "2023-05-01", end_date = (datetime.today() + timedelta(days=30)).strftime("%Y-%m-%d")).index.strftime("%Y-%m-%d").values
 
 # =============================================================================
 # Dataset Building
 # =============================================================================
-
-# date = trading_dates[-1]
 
 index_ticker = "I:VIX"
 
 vix_data = pd.json_normalize(requests.get(f"https://api.polygon.io/v2/aggs/ticker/{index_ticker}/range/1/day/{trading_dates[0]}/{trading_dates[-1]}?adjusted=true&sort=asc&limit=50000&apiKey={polygon_api_key}").json()["results"]).set_index("t")
 vix_data.index = pd.to_datetime(vix_data.index, unit="ms", utc=True).tz_convert("America/New_York")
 vix_data["date"] = vix_data.index.strftime("%Y-%m-%d")
-
-# vix_data = pd.json_normalize(requests.get(f"https://api.polygon.io/v2/aggs/ticker/{index_ticker}/range/1/minute/{date}/{date}?adjusted=true&sort=asc&limit=50000&apiKey={polygon_api_key}").json()["results"]).set_index("t")
-# vix_data.index = pd.to_datetime(vix_data.index, unit="ms", utc=True).tz_convert("America/New_York")
 
 target_ticker = "SPY"
 
@@ -94,7 +89,8 @@ full_feature_data = pd.concat(full_feature_data_list)
 # Forward prediction for the next trading day
 # =============================================================================
 
-trading_date = date
+trading_date = full_feature_data["date"].iloc[-1]
+next_day = full_trading_dates[full_trading_dates > trading_date][0]
 
 historical_data = full_feature_data[full_feature_data["date"] < trading_date].copy().tail(252)
 
