@@ -1,2 +1,2 @@
 # prediction-models
-Prediction models for  SPX returns and regime switching. 
+Prediction model for S&P 500 returns using features derived from the VIX index. 
