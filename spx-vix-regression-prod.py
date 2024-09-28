@@ -26,7 +26,7 @@ polygon_api_key = "KkfCQ7fsZnx0yK4bhX9fD81QplTh0Pf3"
 calendar = get_calendar("NYSE")
 
 # trading_dates = calendar.schedule(start_date = "2019-01-01", end_date = vix_data["date"].iloc[-1]).index.strftime("%Y-%m-%d").values
-trading_dates = calendar.schedule(start_date = "2023-05-01", end_date = (datetime.today() + timedelta(days=1)).strftime("%Y-%m-%d")).index.strftime("%Y-%m-%d").values
+trading_dates = calendar.schedule(start_date = "2023-05-01", end_date = (datetime.today() + timedelta(days=3)).strftime("%Y-%m-%d")).index.strftime("%Y-%m-%d").values
 
 # =============================================================================
 # Dataset Building
@@ -54,35 +54,39 @@ full_feature_data_list = []
 # date = trading_dates[1:-1][-1]
 for date in trading_dates[1:-1]:
     
-    prior_day = trading_dates[trading_dates < date][0]
-    next_day = trading_dates[trading_dates > date][0]
+    try:
+    
+        prior_day = trading_dates[trading_dates < date][0]
+        next_day = trading_dates[trading_dates > date][0]
+            
+        big_ticker_data = vix_data[vix_data["date"] <= date].copy().tail(100)
+        big_ticker_data["1_mo_avg"] = big_ticker_data["c"].rolling(window=20).mean()
+        big_ticker_data["3_mo_avg"] = big_ticker_data["c"].rolling(window=60).mean()
+        big_ticker_data["regime"] = big_ticker_data.apply(lambda row: 1 if (row['1_mo_avg'] > row['3_mo_avg']) else 0, axis=1)
         
-    big_ticker_data = vix_data[vix_data["date"] <= date].copy().tail(100)
-    big_ticker_data["1_mo_avg"] = big_ticker_data["c"].rolling(window=20).mean()
-    big_ticker_data["3_mo_avg"] = big_ticker_data["c"].rolling(window=60).mean()
-    big_ticker_data["regime"] = big_ticker_data.apply(lambda row: 1 if (row['1_mo_avg'] > row['3_mo_avg']) else 0, axis=1)
+        regime = big_ticker_data["regime"].iloc[-1]
+        
+        ticker_data = vix_data[(vix_data["date"] >= prior_day) & (vix_data["date"] <= date)].copy()
+        ticker_data["pct_change"] = round(ticker_data["c"].pct_change()*100,2)
+        
+        daily_return = ticker_data["pct_change"].iloc[-1]
+        daily_value = ticker_data["c"].iloc[-1]
+        implied_move = round((daily_value / np.sqrt(252)), 2)
+        
+        feature_data = pd.DataFrame([{"regime": regime, "daily_return": daily_return, "daily_value": daily_value,
+                                             "daily_implied_move": implied_move}])
+        
+        oos_data = big_target_data[(big_target_data["date"] >= date) & (big_target_data["date"] <= next_day)].copy()
+        oos_data["pct_change"] = round(oos_data["c"].pct_change()*100, 2)
     
-    regime = big_ticker_data["regime"].iloc[-1]
-    
-    ticker_data = vix_data[(vix_data["date"] >= prior_day) & (vix_data["date"] <= date)].copy()
-    ticker_data["pct_change"] = round(ticker_data["c"].pct_change()*100,2)
-    
-    daily_return = ticker_data["pct_change"].iloc[-1]
-    daily_value = ticker_data["c"].iloc[-1]
-    implied_move = round((daily_value / np.sqrt(252)), 2)
-    
-    feature_data = pd.DataFrame([{"regime": regime, "daily_return": daily_return, "daily_value": daily_value,
-                                         "daily_implied_move": implied_move}])
-    
-    oos_data = big_target_data[(big_target_data["date"] >= date) & (big_target_data["date"] <= next_day)].copy()
-    oos_data["pct_change"] = round(oos_data["c"].pct_change()*100, 2)
-
-    next_day_return = oos_data["pct_change"].iloc[-1]
-    
-    feature_data["next_day_return"] = next_day_return
-    feature_data["date"] = date     
-    
-    full_feature_data_list.append(feature_data)
+        next_day_return = oos_data["pct_change"].iloc[-1]
+        
+        feature_data["next_day_return"] = next_day_return
+        feature_data["date"] = date     
+        
+        full_feature_data_list.append(feature_data)
+    except Exception:
+        continue
         
 full_feature_data = pd.concat(full_feature_data_list)
 
@@ -118,4 +122,4 @@ prediction_data = pd.DataFrame({"date": trading_date, "predicted_direction": dir
 if direction_prediction == 1:
     print(f"\nModel expects S&P 500 to go *up* on the next trading day, {next_day}, with a {round(direction_prediction_proba[0]*100, 2)}% probability.")
 elif direction_prediction == 0:
-    print(f"\nModel expects S&P 500 to go *down* on the next trading day,{next_day}, with a {round(direction_prediction_proba[0]*100, 2)}% probability.")
+    print(f"\nModel expects S&P 500 to go *down* on the next trading day,{next_day}, with a {round((1-direction_prediction_proba[0])*100, 2)}% probability.")
